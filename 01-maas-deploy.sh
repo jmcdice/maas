@@ -111,12 +111,10 @@ function boot_vm() {
 
    if [ $? != '0' ]; then
       echo "Booting Up"
-      # Management VM
       nova boot --image $(nova image-list | grep ubuntu1404 | awk '{print $2}') --flavor m1.large \
           --nic net-id=$(neutron net-list | grep floating | awk '{print $2}')  \
           --nic net-id=$(neutron net-list | grep smnet1 | awk '{print $2}')  \
-          --key_name juju-key --security_groups smssh $VM 
-
+          --key_name juju-key --security_groups smssh $VM  &> /dev/null
    else
       echo "Ok" 
    fi
@@ -240,7 +238,7 @@ function get_vm_ip() {
    echo $ip
 }
 
-function init_vm() {
+function install_maas() {
 
    ip=$(get_vm_ip)
 
@@ -270,7 +268,6 @@ EOF
    scp -q -i $key /tmp/eth1 root@$ip:/root/
    $run_cmd_rt "cat /root/eth1 >> /etc/network/interfaces" &> /dev/null
    $run_cmd_rt 'ifup eth1'  &> /dev/null
-   echo "Ok"
 
    echo -n "Installing MAAS Controller: "
    $run_cmd_rt 'apt-get install python-software-properties' &> /dev/null
@@ -313,7 +310,7 @@ function start_up() {
    create_virtual_router
    boot_vm
    wait_for_running
-   init_vm
+   install_maas
 }
 
 function shutdown() {
