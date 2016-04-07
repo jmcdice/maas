@@ -276,7 +276,7 @@ EOF
    $run_cmd_rt 'add-apt-repository ppa:cloud-installer/stable' &> /dev/null
    $run_cmd_rt 'apt-get update' &> /dev/null
    $run_cmd_rt 'apt-get -y install maas' &> /dev/null
-   $run_cmd_rt 'maas-region-admin createadmin' 
+   $run_cmd_rt 'maas-region-admin createadmin --username=maas --password=maas --email=nobody@cloud-band.com'
    echo "Ok"
 
    echo "Login and configure MAAS: http://$ip/MAAS/"
