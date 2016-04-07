@@ -6,7 +6,7 @@
 # source juju.rc
 source /root/keystonerc_admin
 
-VM='mass-vm'
+VM='maas-vm'
 key='/root/.ssh/juju_id_rsa'
 
 # NOTES: apt-get install juju-quickstart juju-core
@@ -95,7 +95,7 @@ function create_tenant_networks() {
 
       echo "Installing"
       neutron net-create --provider:physical_network RegionOne --provider:network_type vlan --provider:segmentation_id 48 smnet1 
-      neutron subnet-create smnet1 10.10.10.0/24 --name subnet1 
+      neutron subnet-create smnet1 10.10.10.0/24 --name subnet1 --enable-dhcp False
 
    else
       echo "Ok"
@@ -106,13 +106,14 @@ function boot_vm() {
 
    echo -n "Checking for management VM: "
 
-   nova list --all-tenants | grep -q juju-management
+   nova list --all-tenants | grep -q $VM
 
    if [ $? != '0' ]; then
       echo "Booting Up"
       # Management VM
       nova boot --image $(nova image-list | grep ubuntu1404 | awk '{print $2}') --flavor m1.large \
           --nic net-id=$(neutron net-list | grep floating | awk '{print $2}')  \
+          --nic net-id=$(neutron net-list | grep smnet1 | awk '{print $2}')  \
           --key_name juju-key --security_groups smssh $VM 
 
    else
@@ -245,28 +246,85 @@ function init_vm() {
    run_cmd_jr="ssh -q -l ubuntu $ip -i $key"
    run_cmd_rt="ssh -q -l root $ip -i $key"
 
-   $run_cmd_jr "sudo sed -n 's/^.*ssh-rsa/ssh-rsa/p' /root/.ssh/authorized_keys > /tmp/authorized_keys" 
-   $run_cmd_jr "sudo mv /tmp/authorized_keys /root/.ssh/" 
-   $run_cmd_jr "sudo chmod 600 /root/.ssh/authorized_keys" 
-   $run_cmd_jr "sudo chown root:root /root/.ssh/authorized_keys" 
+   $run_cmd_jr "sudo sed -n 's/^.*ssh-rsa/ssh-rsa/p' /root/.ssh/authorized_keys > /tmp/authorized_keys"  &> /dev/null
+   $run_cmd_jr "sudo mv /tmp/authorized_keys /root/.ssh/"  &> /dev/null
+   $run_cmd_jr "sudo chmod 600 /root/.ssh/authorized_keys"  &> /dev/null
+   $run_cmd_jr "sudo chown root:root /root/.ssh/authorized_keys"  &> /dev/null
 
    # sudo isn't happy with out this.
    $run_cmd_rt "echo '127.0.0.1 $VM' >> /etc/hosts"
 
+   maas_private_ip=$(nova list|egrep $VM |perl -lane 'print $1 if (/smnet1=(.*?)[\s|\;]/)')
+   cat << EOF > /tmp/eth1
+
+auto eth1
+iface eth1 inet static
+    address $maas_private_ip
+    netmask 255.255.255.0
+EOF
+
    # Ubuntu LTS 14.04 doesn't automatically start a second interface. 
-   #echo -n "Starting second network interface on ($ip):"
-   #$run_cmd_rt "echo -e 'auto eth1\niface eth1 inet dhcp' > /etc/network/interfaces.d/eth1.cfg"
-   #$run_cmd_rt 'ifup eth1' 
-   #echo "Ok"
+   # We want it to be static, so we can run a dhcp server on eth1 for 
+   # all our computes.
+   scp -q -i $key /tmp/eth3 root@$ip:/root/
+   $run_cmd_rt "cat /root/eth1 >> /etc/network/interfaces" &> /dev/null
+   $run_cmd_rt 'ifup eth1'  &> /dev/null
+   echo "Ok"
 
-
-   $run_cmd_rt 'apt-get install python-software-properties'
-   $run_cmd_rt 'add-apt-repository ppa:juju/stable'
-   $run_cmd_rt 'add-apt-repository ppa:maas/stable'
-   $run_cmd_rt 'add-apt-repository ppa:cloud-installer/stable'
-   $run_cmd_rt 'apt-get update'
-   $run_cmd_rt 'apt-get -y install maas'
+   echo -n "Installing MAAS Controller: "
+   $run_cmd_rt 'apt-get install python-software-properties' &> /dev/null
+   $run_cmd_rt 'add-apt-repository ppa:juju/stable' &> /dev/null
+   $run_cmd_rt 'add-apt-repository ppa:maas/stable' &> /dev/null
+   $run_cmd_rt 'add-apt-repository ppa:cloud-installer/stable' &> /dev/null
+   $run_cmd_rt 'apt-get update' &> /dev/null
+   $run_cmd_rt 'apt-get -y install maas' &> /dev/null
+   echo "Ok"
 }
+
+function create_pxe_image() {
+
+   echo -n "Checking for ipxe image: "
+
+   nova image-list |grep -q os-pxe
+   if [ $? != 0 ]; then 
+      echo -n "Installing... "
+      dd if=/dev/zero of=pxeboot.img bs=1M count=4 &> /dev/null
+      mkdosfs pxeboot.img &> /dev/null
+
+      rm -rf /mnt/ipxe/
+      mkdir -p /mnt/ipxe/cdrom/
+      mkdir -p /mnt/ipxe/syslinux/
+
+      # This is what we are modifying
+      losetup /dev/loop0 pxeboot.img &> /dev/null
+      mount /dev/loop0 /mnt/ipxe/cdrom/ &> /dev/null
+      syslinux --install /dev/loop0 &> /dev/null
+
+      # This stuff is read-only.
+      wget -q http://boot.ipxe.org/ipxe.iso
+      mount -o loop ipxe.iso /mnt/ipxe/syslinux/ &> /dev/null
+      cp /mnt/ipxe/syslinux/ipxe.krn /mnt/ipxe/cdrom/
+      cat > /mnt/ipxe/cdrom/syslinux.cfg <<EOF
+DEFAULT ipxe
+LABEL ipxe
+ KERNEL ipxe.krn
+EOF
+
+      umount /mnt/ipxe/cdrom/ &> /dev/null
+      umount /mnt/ipxe/syslinux/ &> /dev/null
+      rm ipxe.iso
+      glance image-create --name os-pxe --is-public true  --disk-format raw --container-format bare < pxeboot.img &> /dev/null
+      if [ $? == 0 ]; then
+         echo "Ok"
+      else
+         echo "Failed."
+      fi
+   else
+      echo "Ok"
+   fi
+}
+
+create_pxe_image
 
 function wait_for_running() {
 
@@ -287,23 +345,24 @@ function wait_for_running() {
 
 function start_up() {
 
-   verify_creds
-   create_sec_group
-   create_ssh_key
-   create_provider_network
-   create_tenant_networks
-   create_flavors
-   create_virtual_router
+   #verify_creds
+   #create_sec_group
+   #create_ssh_key
+   #create_provider_network
+   #create_tenant_networks
+   #create_flavors
+   #create_virtual_router
    boot_vm
    wait_for_running
    init_vm
+   create_pxe_image
+   boot_computes
 }
 function shutdown() {
 
    clean_up
-
 }
 
-clean_up
+# clean_up
 start_up
 
