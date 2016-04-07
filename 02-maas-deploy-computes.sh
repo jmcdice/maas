@@ -50,7 +50,7 @@ function boot_computes() {
    if [ $? != '0' ]; then
       echo "Booting Computes"
 
-      for i in {1..5}; do
+      for i in {1..10}; do
       
          nova boot --image $(nova image-list | grep os-pxe | awk '{print $2}') --flavor m1.large \
           --nic net-id=$(neutron net-list | grep floating | awk '{print $2}')  \

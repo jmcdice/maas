@@ -296,8 +296,34 @@ function wait_for_running() {
    echo "Ok"
 }
 
+function maas_api_login() {
 
-# clean_up
+   echo -n "Setting up MAAS API key: "
+   ip=$(get_vm_ip)
+   run_cmd_rt="ssh -q -l root $ip -i $key"
+
+   api_key=$($run_cmd_rt 'maas-region-admin apikey --username=maas')
+   $run_cmd_rt "maas login admin http://127.0.0.1/MAAS/api/1.0 $api_key" |grep -q 'You are now logged'
+   if [ $? == 0 ]; then
+      echo "Ok"
+   else
+      echo "Failed"
+   fi
+}
+
+function_download_images() {
+
+   echo -n "Starting to download Ubuntu Images to MAAS: "
+   ip=$(get_vm_ip)
+   run_cmd_rt="ssh -q -l root $ip -i $key"
+
+   $run_cmd_rt 'maas admin boot-resources import' | grep -q 'boot resources started'
+   if [ $? == 0 ]; then
+      echo "Ok"
+   else
+      echo "Failed"
+   fi
+} 
 
 function start_up() {
 
@@ -311,6 +337,8 @@ function start_up() {
    boot_vm
    wait_for_running
    install_maas
+   maas_api_login
+   maas_download_images
 }
 
 function shutdown() {
@@ -320,4 +348,3 @@ function shutdown() {
 
 clean_up
 start_up
-
