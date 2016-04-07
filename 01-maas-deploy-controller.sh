@@ -325,6 +325,28 @@ function_download_images() {
    fi
 } 
 
+function maas_configure_dhcp() {
+
+   echo -n "Starting DHCP Services: "
+   ip=$(get_vm_ip)
+   run_cmd_rt="ssh -q -l root $ip -i $key"
+
+   uuid=$($run_cmd_rt 'maas admin node-groups list' | grep uuid | cut -d\" -f4)
+
+   $run_cmd_rt "maas admin node-group-interface update $uuid eth1 \
+                ip_range_high=10.10.10.200 \
+                ip_range_low=10.10.10.100 \
+                management=2 \
+                broadcast_ip=10.10.10.255 \
+                router_ip=10.10.10.1 " | grep -q 'Success'
+
+   if [ $? == 0 ]; then
+      echo "Ok"
+   else
+      echo "Failed"
+   fi
+}
+
 function start_up() {
 
    verify_creds
@@ -339,6 +361,7 @@ function start_up() {
    install_maas
    maas_api_login
    maas_download_images
+   maas_configure_dhcp
 }
 
 function shutdown() {
