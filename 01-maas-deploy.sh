@@ -26,7 +26,7 @@ function create_sec_group() {
    neutron security-group-create smssh &> /dev/null
 
    # Wide open for now..
-   nova secgroup-add-rule smssh tcp 1 65535 0.0.0.0/0
+   nova secgroup-add-rule smssh tcp 1 65535 0.0.0.0/0 &> /dev/null
 
    #for port in 22 80 443; do
       #neutron security-group-rule-create --direction ingress --ethertype IPv4 --protocol \
@@ -34,7 +34,7 @@ function create_sec_group() {
    #done
 
    neutron security-group-rule-create --direction ingress --ethertype IPv4 \
-      --protocol icmp smssh 
+      --protocol icmp smssh  &> /dev/null
 
    neutron security-group-list | grep -q smssh
    check_exit_code
@@ -59,11 +59,11 @@ function create_provider_network() {
       echo "Installing ($net.0/$prefix)"
 
       neutron net-create floating --provider:network_type flat \
-          --provider:physical_network RegionOne --router:external=True 
+          --provider:physical_network RegionOne --router:external=True  &> /dev/null
 
       neutron subnet-create --name floating-subnet --allocation-pool \
           start=$start,end=$end --gateway $gateway floating $net.0/24 \
-          --dns_nameservers list=true 8.8.8.8 
+          --dns_nameservers list=true 8.8.8.8  &> /dev/null
 
    else
       echo "Ok"
@@ -78,9 +78,9 @@ function create_virtual_router() {
    if [ $? != '0' ]; then
       echo "Installing"
 
-      neutron router-create router1 
-      neutron router-gateway-set router1 floating 
-      neutron router-interface-add router1 subnet1 
+      neutron router-create router1  &> /dev/null
+      neutron router-gateway-set router1 floating  &> /dev/null
+      neutron router-interface-add router1 subnet1  &> /dev/null
    else
       echo "Ok"
    fi
@@ -94,8 +94,9 @@ function create_tenant_networks() {
    if [ $? != '0' ]; then
 
       echo "Installing"
-      neutron net-create --provider:physical_network RegionOne --provider:network_type vlan --provider:segmentation_id 48 smnet1 
-      neutron subnet-create smnet1 10.10.10.0/24 --name subnet1 --enable-dhcp False
+      neutron net-create --provider:physical_network RegionOne --provider:network_type \
+         vlan --provider:segmentation_id 48 smnet1  &> /dev/null
+      neutron subnet-create smnet1 10.10.10.0/24 --name subnet1 --disable-dhcp &> /dev/null
 
    else
       echo "Ok"
@@ -127,7 +128,7 @@ function create_flavors() {
    nova flavor-list|grep -q m1.medium
    if [ $? != '0' ]; then
       echo "Installing"
-      nova flavor-create m1.medium auto 4096 40 2 
+      nova flavor-create m1.medium auto 4096 40 2  &> /dev/null
    else
       echo "Ok"
    fi
@@ -136,7 +137,7 @@ function create_flavors() {
    nova flavor-list|grep -q m1.large
    if [ $? != '0' ]; then
       echo "Installing"
-      nova flavor-create m1.large auto 8192 80 4 
+      nova flavor-create m1.large auto 8192 80 4  &> /dev/null
    else
       echo "Ok"
    fi
@@ -145,7 +146,7 @@ function create_flavors() {
    nova flavor-list|grep -q m1.xlarge
    if [ $? != '0' ]; then
       echo "Installing"
-      nova flavor-create m1.xlarge auto 16384 160 8 
+      nova flavor-create m1.xlarge auto 16384 160 8  &> /dev/null
    else
       echo "Ok"
    fi
@@ -266,7 +267,7 @@ EOF
    # Ubuntu LTS 14.04 doesn't automatically start a second interface. 
    # We want it to be static, so we can run a dhcp server on eth1 for 
    # all our computes.
-   scp -q -i $key /tmp/eth3 root@$ip:/root/
+   scp -q -i $key /tmp/eth1 root@$ip:/root/
    $run_cmd_rt "cat /root/eth1 >> /etc/network/interfaces" &> /dev/null
    $run_cmd_rt 'ifup eth1'  &> /dev/null
    echo "Ok"
@@ -320,6 +321,6 @@ function shutdown() {
    clean_up
 }
 
-# clean_up
+clean_up
 start_up
 
