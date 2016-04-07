@@ -278,7 +278,10 @@ EOF
    $run_cmd_rt 'add-apt-repository ppa:cloud-installer/stable' &> /dev/null
    $run_cmd_rt 'apt-get update' &> /dev/null
    $run_cmd_rt 'apt-get -y install maas' &> /dev/null
+   $run_cmd_rt 'maas-region-admin createadmin' 
    echo "Ok"
+
+   echo "Login and configure MAAS: http://$ip/MAAS/"
 }
 
 function wait_for_running() {
@@ -300,20 +303,16 @@ function wait_for_running() {
 
 function start_up() {
 
-   #verify_creds
-   #create_sec_group
-   #create_ssh_key
-   #create_provider_network
-   #create_tenant_networks
-   #create_flavors
-   #create_virtual_router
+   verify_creds
+   create_sec_group
+   create_ssh_key
+   create_provider_network
+   create_tenant_networks
+   create_flavors
+   create_virtual_router
    boot_vm
    wait_for_running
    init_vm
-
-   ip=$(get_vm_ip)
-   echo "Configure MAAS here: http://$ip/MAAS/
-
 }
 
 function shutdown() {
