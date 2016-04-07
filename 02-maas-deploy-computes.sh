@@ -29,9 +29,9 @@ EOF
 
       umount /mnt/ipxe/cdrom/ &> /dev/null
       umount /mnt/ipxe/syslinux/ &> /dev/null
-      rm ipxe.iso
       glance image-create --name os-pxe --is-public true  --disk-format raw --container-format bare < pxeboot.img &> /dev/null
       if [ $? == 0 ]; then
+         rm -f ipxe.iso pxeboot.img
          echo "Ok"
       else
          echo "Failed."
